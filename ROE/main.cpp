@@ -34,6 +34,9 @@ GetRenderTargetData_t oGetRenderTargetData = 0;
 typedef HRESULT(APIENTRY *CreateOffscreenPlainSurface_t)(IDirect3DDevice9*, UINT Width, UINT Height, D3DFORMAT Format, D3DPOOL Pool, IDirect3DSurface9 **ppSurface, HANDLE *pSharedHandle);
 CreateOffscreenPlainSurface_t oCreateOffscreenPlainSurface = 0;
 
+typedef HRESULT(APIENTRY *DrawIndexedPrimitive)(IDirect3DDevice9*, D3DPRIMITIVETYPE, INT, UINT, UINT, UINT, UINT);
+HRESULT APIENTRY DrawIndexedPrimitive_hook(IDirect3DDevice9*, D3DPRIMITIVETYPE, INT, UINT, UINT, UINT, UINT);
+DrawIndexedPrimitive DrawIndexedPrimitive_orig = 0;
 //==========================================================================================================================
 
 HRESULT APIENTRY hkGetRenderTargetData(LPDIRECT3DDEVICE9 pDevice, IDirect3DSurface9 *pRenderTarget, IDirect3DSurface9 *pDestSurface)
@@ -66,6 +69,47 @@ HRESULT APIENTRY SetStreamSource_hook(LPDIRECT3DDEVICE9 pDevice, UINT StreamNumb
 		Stride = sStride;
 
 	return SetStreamSource_orig(pDevice, StreamNumber, pStreamData, OffsetInBytes, sStride);
+}
+//==========================================================================================================================
+
+using DrawIndexedPrimitive = long(__stdcall*)(IDirect3DDevice9*, D3DPRIMITIVETYPE, INT, UINT, UINT, UINT, UINT);
+
+long __stdcall Hook_DrawIndexedPrimitive(IDirect3DDevice9* Device, D3DPRIMITIVETYPE Type, INT BaseVertexIndex, UINT MinIndex, UINT pNumVertices, UINT StartIndex, UINT PrimitiveCount)
+{
+	NumVertices = pNumVertices;
+	primCount = PrimitiveCount;
+	DrawIndexedPrimitive  g_drawIndexedPrimitive = NULL;
+
+	if (PLAYERS) {
+		Device->SetTexture(0, Red);
+		Device->SetRenderState(D3DRS_ZENABLE, false);
+		g_drawIndexedPrimitive(Device, Type, BaseVertexIndex, MinIndex, pNumVertices, StartIndex, PrimitiveCount);
+		Device->SetRenderState(D3DRS_ZENABLE, true);
+		Device->SetTexture(0, Blue);
+	}
+
+	return g_drawIndexedPrimitive(Device, Type, BaseVertexIndex, MinIndex, pNumVertices, StartIndex, PrimitiveCount);
+}
+HRESULT APIENTRY DrawIndexedPrimitive_hook(IDirect3DDevice9* pDevice, D3DPRIMITIVETYPE Type, INT BaseVertexIndex, UINT MinVertexIndex, UINT NumVertices, UINT startIndex, UINT primCount)
+{
+	//wallhack
+	if (wallhack > 0) {
+		if (PLAYERS) {
+			pDevice->SetRenderState(D3DRS_ZENABLE, FALSE);
+			if (wallhack == 2){
+				float sRed[4] = { 1.0f, 0.0f, 0.0f, 1.0f };
+				float sGreen[4] = { 0.0f, 0.5f, 0.0f, 0.0f };
+				DWORD dwOldZEnable = D3DZB_TRUE;
+				pDevice->SetPixelShaderConstantF(18, sRed, 1);
+				pDevice->GetRenderState(D3DRS_ZENABLE, &dwOldZEnable);
+				pDevice->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+				DrawIndexedPrimitive_orig(pDevice, Type, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
+				pDevice->SetRenderState(D3DRS_ZENABLE, dwOldZEnable);
+				pDevice->SetPixelShaderConstantF(18, sGreen, 1);
+			}
+		}
+	}
+	return DrawIndexedPrimitive_orig(pDevice, Type, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
 }
 
 //==========================================================================================================================
@@ -107,29 +151,29 @@ HRESULT APIENTRY SetTexture_hook(LPDIRECT3DDEVICE9 pDevice, DWORD Sampler, IDire
 
 	if (wallhack == 2 && vSize != 1436) {
 	}
-
-	if (wallhack > 0)
-	{
-		if (PLAYERS)
-		{
-			if (wallhack == 2)
-			{
-				pDevice->SetRenderState(D3DRS_ZENABLE, false);
-				pDevice->SetTexture(0, Red);
-				SetTexture_hook(pDevice, Sampler, pTexture);
-				//Device->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
-				pDevice->SetRenderState(D3DRS_ZENABLE, true);
-				//Device->SetTexture(0, texWarface);
-				pDevice->SetTexture(0, Blue);
-			}
-			pDevice->SetRenderState(D3DRS_ZENABLE, false);
-					float bias = 1000.0f;
-					float bias_float = static_cast<float>(-bias);
-					bias_float /= 10000.0f;
-					pDevice->SetRenderState(D3DRS_DEPTHBIAS, (DWORD)&bias_float);
-					SetTexture_orig(pDevice, Sampler, pTexture);
-		}
-	}
+	
+	//if (wallhack > 0)
+	//{
+	//	if (PLAYERS)
+	//	{
+	//		if (wallhack == 2)
+	//		{
+	//			pDevice->SetRenderState(D3DRS_ZENABLE, false);
+	//			pDevice->SetTexture(0, Red);
+	//			SetTexture_hook(pDevice, Sampler, pTexture);
+	//			//Device->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
+	//			pDevice->SetRenderState(D3DRS_ZENABLE, true);
+	//			//Device->SetTexture(0, texWarface);
+	//			pDevice->SetTexture(0, Blue);
+	//		}
+	//		pDevice->SetRenderState(D3DRS_ZENABLE, false);
+	//				float bias = 1000.0f;
+	//				float bias_float = static_cast<float>(-bias);
+	//				bias_float /= 10000.0f;
+	//				pDevice->SetRenderState(D3DRS_DEPTHBIAS, (DWORD)&bias_float);
+	//				SetTexture_orig(pDevice, Sampler, pTexture);
+	//	}
+	//}
 
 
 	//worldtoscreen weapons in hand
@@ -261,26 +305,6 @@ HRESULT APIENTRY SetTexture_hook(LPDIRECT3DDEVICE9 pDevice, DWORD Sampler, IDire
 	}
 	*/
 	return SetTexture_orig(pDevice, Sampler, pTexture);
-}
-//==========================================================================================================================
-
-using DrawIndexedPrimitive = long(__stdcall*)(IDirect3DDevice9*, D3DPRIMITIVETYPE, INT, UINT, UINT, UINT, UINT);
-
-long __stdcall Hook_DrawIndexedPrimitive(IDirect3DDevice9* Device, D3DPRIMITIVETYPE Type, INT BaseVertexIndex, UINT MinIndex, UINT pNumVertices, UINT StartIndex, UINT PrimitiveCount)
-{
-	NumVertices = pNumVertices;
-	primCount = PrimitiveCount;
-	DrawIndexedPrimitive  g_drawIndexedPrimitive = NULL;
-
-	if  (PLAYERS) {
-		Device->SetTexture(0, Red);
-		Device->SetRenderState(D3DRS_ZENABLE, false);
-		g_drawIndexedPrimitive(Device, Type, BaseVertexIndex, MinIndex, pNumVertices, StartIndex, PrimitiveCount);
-		Device->SetRenderState(D3DRS_ZENABLE, true);
-		Device->SetTexture(0, Blue);
-	}
-
-	return g_drawIndexedPrimitive(Device, Type, BaseVertexIndex, MinIndex, pNumVertices, StartIndex, PrimitiveCount);
 }
 
 //==========================================================================================================================
