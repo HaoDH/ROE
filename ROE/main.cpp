@@ -37,6 +37,7 @@ CreateOffscreenPlainSurface_t oCreateOffscreenPlainSurface = 0;
 typedef HRESULT(APIENTRY *DrawIndexedPrimitive)(IDirect3DDevice9*, D3DPRIMITIVETYPE, INT, UINT, UINT, UINT, UINT);
 HRESULT APIENTRY DrawIndexedPrimitive_hook(IDirect3DDevice9*, D3DPRIMITIVETYPE, INT, UINT, UINT, UINT, UINT);
 DrawIndexedPrimitive DrawIndexedPrimitive_orig = 0;
+
 //==========================================================================================================================
 
 HRESULT APIENTRY hkGetRenderTargetData(LPDIRECT3DDEVICE9 pDevice, IDirect3DSurface9 *pRenderTarget, IDirect3DSurface9 *pDestSurface)
@@ -107,7 +108,8 @@ HRESULT APIENTRY DrawIndexedPrimitive_hook(IDirect3DDevice9* pDevice, D3DPRIMITI
 				pDevice->SetRenderState(D3DRS_ZENABLE, dwOldZEnable);
 				pDevice->SetPixelShaderConstantF(18, sGreen, 1);
 			}
-			return DrawIndexedPrimitive_orig(pDevice, Type, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
+			//return DrawIndexedPrimitive_orig(pDevice, Type, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
+			return D3D_OK;
 		}
 	}
 }
@@ -215,6 +217,71 @@ HRESULT APIENTRY SetTexture_hook(LPDIRECT3DDEVICE9 pDevice, DWORD Sampler, IDire
 	//				SetTexture_orig(pDevice, Sampler, pTexture);
 	//	}
 	//}
+
+	//zoom hack
+	if (GetAsyncKeyState(VK_MBUTTON)) {
+		//ZoomLevel Hack: None -> X2 -> X4 -> X8
+		int ZoomLevel;
+		ZoomLevel++;
+		if (ZoomLevel > 3) {
+			ZoomLevel = 0;
+		}
+
+		//Default ZoomLevel
+		float newnX = -0.857f;
+		float newX = 0.857f;
+		float newY = 0.453f;
+		float newnY = -0.453f;
+
+		switch (ZoomLevel)
+		{
+		case 1: //2X Scope
+			newnX = -0.548f;
+			newX = 0.548f;
+			newY = 0.289f;
+			newnY = -0.289f;
+			break;
+		case 2: //4X Scope
+			newnX = -0.246f;
+			newX = 0.246f;
+			newY = 0.130f;
+			newnY = -0.130f;
+			break;
+		case 3: //8X Scope
+			newnX = -0.136f;
+			newX = 0.136f;
+			newY = 0.072f;
+			newnY = -0.072f;
+			break;
+		default: // Red Dot /None Scope
+			break;
+		}
+
+		DWORD QSCamera = *(DWORD*)(0x29E594C);
+		
+		DWORD Zoom = *(DWORD*)(QSCamera + 0x4);
+		DWORD ZoomDetail = *(DWORD*)(Zoom + 0x10);
+		int X = 0x8C;
+		int nX = 0x88;
+		int nY = 0x94;
+		int Y = 0x90;
+
+		DWORD XAddr = *(DWORD*)(ZoomDetail + X);
+		DWORD nXAddr = *(DWORD*)(ZoomDetail + nX);
+		DWORD YAddr = *(DWORD*)(ZoomDetail + Y);
+		DWORD nYAddr = *(DWORD*)(ZoomDetail + nY);
+
+		float ZoomX = *(float*)XAddr;
+		float ZoomNX = *(float*)nXAddr;
+		float ZoomY = *(float*)YAddr;
+		float ZoomNY = *(float*)nYAddr;
+
+		*(float*)(XAddr) = newX;
+		*(float*)(nXAddr) = newnX;
+		*(float*)(YAddr) = newY;
+		*(float*)(nYAddr) = newnY;
+
+	}
 
 
 	//worldtoscreen weapons in hand
@@ -569,19 +636,6 @@ HRESULT APIENTRY Present_hook(IDirect3DDevice9* pDevice, const RECT *pSourceRect
 		}
 	}
 
-	/*
-	//draw logger
-	if (Font && countnum != 0)
-	{
-	char szString[255];
-	sprintf_s(szString, "countnum = %d", countnum);
-	DrawString(Font, 219, 99, D3DCOLOR_ARGB(255, 0, 0, 0), (char*)&szString[0]);
-	DrawString(Font, 221, 101, D3DCOLOR_ARGB(255, 0, 0, 0), (char*)&szString[0]);
-	DrawString(Font, 220, 100, D3DCOLOR_ARGB(255, 255, 255, 255), (char*)&szString[0]);
-	DrawString(Font, 220, 110, D3DCOLOR_ARGB(255, 255, 255, 255), (PCHAR)"hold P to +");
-	DrawString(Font, 220, 120, D3DCOLOR_ARGB(255, 255, 255, 255), (PCHAR)"hold O to -");
-	}
-	*/
 	
 	return Present_orig(pDevice, pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion);
 }
