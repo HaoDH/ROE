@@ -262,6 +262,26 @@ HRESULT APIENTRY SetTexture_hook(LPDIRECT3DDEVICE9 pDevice, DWORD Sampler, IDire
 	*/
 	return SetTexture_orig(pDevice, Sampler, pTexture);
 }
+//==========================================================================================================================
+
+using DrawIndexedPrimitive = long(__stdcall*)(IDirect3DDevice9*, D3DPRIMITIVETYPE, INT, UINT, UINT, UINT, UINT);
+
+long __stdcall Hook_DrawIndexedPrimitive(IDirect3DDevice9* Device, D3DPRIMITIVETYPE Type, INT BaseVertexIndex, UINT MinIndex, UINT pNumVertices, UINT StartIndex, UINT PrimitiveCount)
+{
+	NumVertices = pNumVertices;
+	primCount = PrimitiveCount;
+	DrawIndexedPrimitive  g_drawIndexedPrimitive = NULL;
+
+	if  (PLAYERS) {
+		Device->SetTexture(0, Red);
+		Device->SetRenderState(D3DRS_ZENABLE, false);
+		g_drawIndexedPrimitive(Device, Type, BaseVertexIndex, MinIndex, pNumVertices, StartIndex, PrimitiveCount);
+		Device->SetRenderState(D3DRS_ZENABLE, true);
+		Device->SetTexture(0, Blue);
+	}
+
+	return g_drawIndexedPrimitive(Device, Type, BaseVertexIndex, MinIndex, pNumVertices, StartIndex, PrimitiveCount);
+}
 
 //==========================================================================================================================
 
