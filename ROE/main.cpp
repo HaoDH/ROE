@@ -107,9 +107,33 @@ HRESULT APIENTRY DrawIndexedPrimitive_hook(IDirect3DDevice9* pDevice, D3DPRIMITI
 				pDevice->SetRenderState(D3DRS_ZENABLE, dwOldZEnable);
 				pDevice->SetPixelShaderConstantF(18, sGreen, 1);
 			}
+			return DrawIndexedPrimitive_orig(pDevice, Type, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
 		}
 	}
-	return DrawIndexedPrimitive_orig(pDevice, Type, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
+}
+
+//==========================================================================================================================
+
+HRESULT GenerateTexture(IDirect3DDevice9 *pDevice, IDirect3DTexture9 **ppD3Dtex, DWORD colour32)
+{
+	if (FAILED(pDevice->CreateTexture(8, 8, 1, 0, D3DFMT_A4R4G4B4, D3DPOOL_MANAGED, ppD3Dtex, NULL)))
+		return E_FAIL;
+
+	WORD colour16 = ((WORD)((colour32 >> 28) & 0xF) << 12)
+		| (WORD)(((colour32 >> 20) & 0xF) << 8)
+		| (WORD)(((colour32 >> 12) & 0xF) << 4)
+		| (WORD)(((colour32 >> 4) & 0xF) << 0);
+
+	D3DLOCKED_RECT d3dlr;
+	(*ppD3Dtex)->LockRect(0, &d3dlr, 0, 0);
+	WORD *pDst16 = (WORD*)d3dlr.pBits;
+
+	for (int xy = 0; xy < 8 * 8; xy++)
+		*pDst16++ = colour16;
+
+	(*ppD3Dtex)->UnlockRect(0);
+
+	return S_OK;
 }
 
 //==========================================================================================================================
@@ -150,10 +174,27 @@ HRESULT APIENTRY SetTexture_hook(LPDIRECT3DDEVICE9 pDevice, DWORD Sampler, IDire
 
 
 	if (wallhack == 2 && vSize != 1436) {
+
 	}
-	
-	//if (wallhack > 0)
-	//{
+	if (wallhack > 0) {
+		if (PLAYERS) {
+			AddWeapons(pDevice);
+			pDevice->SetRenderState(D3DRS_ZENABLE, FALSE);
+			if (wallhack == 2) {
+				float sRed[4] = { 1.0f, 0.0f, 0.0f, 1.0f };
+				float sGreen[4] = { 0.0f, 0.5f, 0.0f, 0.0f };
+				DWORD dwOldZEnable = D3DZB_TRUE;
+				pDevice->SetPixelShaderConstantF(18, sRed, 1);
+				pDevice->GetRenderState(D3DRS_ZENABLE, &dwOldZEnable);
+				pDevice->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+				DrawIndexedPrimitive_orig(pDevice, D3DPT_TRIANGLELIST, 0, 0, NumVertices, 0, primCount);
+				pDevice->SetRenderState(D3DRS_ZENABLE, dwOldZEnable);
+				pDevice->SetPixelShaderConstantF(18, sGreen, 1);
+			}
+			return DrawIndexedPrimitive_orig(pDevice, D3DPT_TRIANGLELIST, 0, 0, NumVertices, 0, primCount);
+		}
+	}
+
 	//	if (PLAYERS)
 	//	{
 	//		if (wallhack == 2)
@@ -679,6 +720,9 @@ DWORD WINAPI RosD3D(__in LPVOID lpParameter)
 	DetourAttach(&(PVOID&)Real_CreateFile, Routed_CreateFile);
 	DetourTransactionCommit();
 	*/
+
+	// Set EndScene_orig to the original EndScene etc.
+	DrawIndexedPrimitive_orig = (DrawIndexedPrimitive)dVtable[82];
 	
 	// Detour functions x86 & x64
 	if (MH_Initialize() != MH_OK) { return 1; }
@@ -690,7 +734,7 @@ DWORD WINAPI RosD3D(__in LPVOID lpParameter)
 	if (MH_EnableHook((DWORD_PTR*)dVtable[17]) != MH_OK) { return 1; }
 	if (MH_CreateHook((DWORD_PTR*)dVtable[16], &Reset_hook, reinterpret_cast<void**>(&Reset_orig)) != MH_OK) { return 1; }
 	if (MH_EnableHook((DWORD_PTR*)dVtable[16]) != MH_OK) { return 1; }
-
+	if (MH_CreateHook((DWORD_PTR*)dVtable[82], &DrawIndexedPrimitive_hook, reinterpret_cast<void**>(&DrawIndexedPrimitive_orig)) != MH_OK) { return 1; }
 	if (MH_CreateHook((DWORD_PTR*)dVtable[32], &hkGetRenderTargetData, reinterpret_cast<void**>(&oGetRenderTargetData)) != MH_OK) { return 1; }
 	if (MH_EnableHook((DWORD_PTR*)dVtable[32]) != MH_OK) { return 1; }
 	if (MH_CreateHook((DWORD_PTR*)dVtable[36], &hkCreateOffscreenPlainSurface, reinterpret_cast<void**>(&oCreateOffscreenPlainSurface)) != MH_OK) { return 1; }
